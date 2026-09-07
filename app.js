@@ -48,6 +48,18 @@ Object.entries(suitNames).forEach(([suit, suitName], suitIndex) => ranks.forEach
   cards.push({ id: `${suit}-${rankIndex + 1}`, name: `${suitName}${rank}`, number: rankIndex + 1, rank: rankIndex + 1, suit, arcana: '小阿尔卡纳', element: suitElements[suit], themes: `${suitThemes[suit]}、${upright.split(' · ')[0]}`, upright: `${upright} · ${suitName}`, reversed: `${reversedRankWords[rankIndex]} · ${suitName}`, symbol: ['杖', '杯', '剑', '币'][suitIndex] });
 }));
 
+// Akaxi 图片中每组宫廷牌按「国王、王后、骑士、侍者」排列，需映射到本牌库的「侍者、骑士、王后、国王」。
+const akaxiImageOrder = [
+  ...Array.from({ length: 22 }, (_, index) => index),
+  ...[22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 35, 34, 33, 32],
+  ...[36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 49, 48, 47, 46],
+  ...[50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 63, 62, 61, 60],
+  ...[64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 77, 76, 75, 74]
+];
+cards.forEach((card, cardIndex) => {
+  card.image = `assets/akaxi-tarot/${akaxiImageOrder[cardIndex]}.png`;
+});
+
 const spreadLabels = {
   situation: ['现状', '阻碍', '建议'],
   timeline: ['过去', '现在', '未来'],
@@ -161,11 +173,17 @@ function renderRwsScene(card) {
   return `<div class="card-scene"><span class="card-symbol" aria-hidden="true">${escapeHtml(symbol)}</span><span class="scene-caption">${escapeHtml(sceneLabel)}</span></div>`;
 }
 
+function renderCardArt(card) {
+  return `
+    <div class="card-art-fallback">${renderRwsScene(card)}</div>
+    <img class="card-image" src="${escapeHtml(card.image)}" alt="${escapeHtml(card.name)}牌面" decoding="async" draggable="false">`;
+}
+
 function renderCards(drawn, spread) {
   $('drawnCards').innerHTML = drawn.map((card, index) => `
     <article class="tarot-card ${isCardReversed(card) ? 'is-reversed' : ''}" style="animation-delay:${index * 140}ms">
       <p class="card-position">${escapeHtml(spreadLabels[spread][index])}</p>
-      <div class="card-art"><div class="card-art-inner">${renderRwsScene(card)}</div></div>
+      <div class="card-art"><div class="card-art-inner">${renderCardArt(card)}</div></div>
       <div class="card-meta">
         <div class="card-name-row"><h3>${escapeHtml(card.name)}</h3><span class="orientation">${isCardReversed(card) ? '逆位' : '正位'}</span></div>
         <p class="keywords">${escapeHtml(isCardReversed(card) ? (typeof card.reversed === 'string' ? card.reversed : card.upright) : card.upright)}</p>
