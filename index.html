@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#18201f">
+  <title>塔罗占卜 · 个人牌意手记</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#divination" aria-label="返回占卜区">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span>
+        <strong>塔罗占卜</strong>
+        <small>个人牌意手记</small>
+      </span>
+    </a>
+    <span class="privacy-badge">仅存于本机</span>
+  </header>
+
+  <aside id="reviewBanner" class="review-banner" hidden aria-live="polite">
+    <div class="review-icon" aria-hidden="true">◉</div>
+    <div class="review-content">
+      <div class="review-heading">
+        <p class="eyebrow">自主复盘 Agent</p>
+        <time id="reviewTime"></time>
+      </div>
+      <h2 id="reviewTitle">你的 30 日牌面复盘</h2>
+      <p id="reviewSummary"></p>
+      <div id="reviewHighlights" class="review-highlights"></div>
+    </div>
+    <button id="dismissReview" class="icon-button" type="button" aria-label="关闭复盘横幅" title="关闭复盘横幅">×</button>
+  </aside>
+
+  <main>
+    <section id="divination" class="divination-section" aria-labelledby="divinationTitle">
+      <div class="section-intro">
+        <p class="eyebrow">此刻的问题</p>
+        <h1 id="divinationTitle">让牌面照见正在发生的事</h1>
+      </div>
+
+      <form id="drawForm" class="draw-form">
+        <label for="question">你想询问什么？</label>
+        <textarea id="question" name="question" maxlength="300" rows="3" required placeholder="例如：今天的工作运势如何？"></textarea>
+
+        <fieldset class="spread-picker">
+          <legend>选择三牌牌阵</legend>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="spread" value="situation" checked>
+              <span>现状 · 阻碍 · 建议</span>
+            </label>
+            <label>
+              <input type="radio" name="spread" value="timeline">
+              <span>过去 · 现在 · 未来</span>
+            </label>
+            <label>
+              <input type="radio" name="spread" value="self">
+              <span>身 · 心 · 灵</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="draw-action">
+          <button id="drawButton" class="primary-button" type="submit">抽取三张牌</button>
+          <p>每次解读会参考近 30 天记录、反馈与已上传的牌意书。</p>
+        </div>
+      </form>
+
+      <div id="deckStage" class="deck-stage" aria-hidden="true">
+        <div class="card-back back-one"></div>
+        <div class="card-back back-two"></div>
+        <div class="card-back back-three"></div>
+      </div>
+    </section>
+
+    <section id="resultSection" class="result-section" hidden aria-labelledby="resultTitle">
+      <div class="section-heading-row">
+        <div>
+          <p id="resultSpread" class="eyebrow"></p>
+          <h2 id="resultTitle">本次牌面</h2>
+        </div>
+        <time id="resultTime"></time>
+      </div>
+      <div id="drawnCards" class="drawn-cards"></div>
+      <div id="numerologySummary" class="numerology-summary" hidden></div>
+      <article class="interpretation">
+        <p class="eyebrow">本地 RAG 解读 · 无需 Ollama</p>
+        <div id="interpretationText" class="interpretation-text"></div>
+      </article>
+    </section>
+
+    <section class="library-band" aria-labelledby="libraryTitle">
+      <div class="library-copy">
+        <p class="eyebrow">你的牌意来源</p>
+        <h2 id="libraryTitle">上传 EPUB 参考书</h2>
+        <p>书中正文只在本机提取和检索。支持无 DRM、含可选中文字的 EPUB。</p>
+      </div>
+      <div class="library-actions">
+        <input id="epubInput" class="visually-hidden" type="file" accept=".epub,application/epub+zip">
+        <button id="uploadEpub" class="secondary-button" type="button">选择 EPUB</button>
+        <button id="removeEpub" class="text-button danger-text" type="button" hidden>移除参考书</button>
+        <div id="bookStatus" class="book-status">尚未上传参考书</div>
+        <div id="vectorStatus" class="vector-status">正在准备本地语义索引…</div>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="historyTitle">
+      <div class="section-heading-row history-heading">
+        <div>
+          <p class="eyebrow">长期记忆</p>
+          <h2 id="historyTitle">历史记录</h2>
+        </div>
+        <div class="data-actions">
+          <button id="exportData" class="secondary-button compact" type="button">导出 JSON</button>
+          <input id="importInput" class="visually-hidden" type="file" accept="application/json,.json">
+          <button id="addLegacyReading" class="secondary-button compact" type="button">导入旧占卜模板</button>
+          <button id="importData" class="text-button compact" type="button">恢复 JSON 备份</button>
+        </div>
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div id="emptyHistory" class="empty-state">
+        <span aria-hidden="true">◇</span>
+        <p>第一笔牌面会留在这里。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>所有占卜、反馈、复盘与参考书内容均保存在当前浏览器的 IndexedDB 中。</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="legacyDialog" class="legacy-dialog" aria-labelledby="legacyTitle">
+    <form id="legacyForm" method="dialog" class="legacy-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">长期记忆 · 手动补录</p><h2 id="legacyTitle">登记一笔旧占卜</h2></div>
+        <button id="closeLegacy" class="icon-button dark-icon" type="button" aria-label="关闭登记窗口">×</button>
+      </div>
+      <div class="legacy-grid two-columns">
+        <label>日期和时间<input id="legacyDate" type="datetime-local" required></label>
+        <label>问卜者（可选）<input id="legacyQuerent" type="text" maxlength="80" placeholder="我 / 朋友 / 来访者"></label>
+      </div>
+      <label>问题<textarea id="legacyQuestion" rows="2" maxlength="300" required placeholder="当时问了什么？"></textarea></label>
+      <div class="legacy-spread-title"><span>阵型</span><small>统一按三张牌：现状 · 阻碍 · 建议</small></div>
+      <div class="legacy-grid three-columns">
+        <label>现状<input id="legacyCard1" type="text" required placeholder="如：太阳 / 太阳R"></label>
+        <label>阻碍<input id="legacyCard2" type="text" required placeholder="如：宝剑八逆位"></label>
+        <label>建议<input id="legacyCard3" type="text" required placeholder="如：圣杯二"></label>
+      </div>
+      <label>我的解读<textarea id="legacyInterpretation" rows="5" placeholder="当时你是怎样理解这三张牌的？"></textarea></label>
+      <label>后续发展 / 回验<textarea id="legacyFeedback" rows="3" placeholder="后来发生了什么？例如：应验了、部分应验、未应验……"></textarea></label>
+      <div class="dialog-actions"><button id="cancelLegacy" class="secondary-button" type="button">取消</button><button class="primary-button" type="submit">保存到牌史</button></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
