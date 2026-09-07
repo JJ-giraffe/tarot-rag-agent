@@ -13,6 +13,7 @@ const SETTINGS_STORE = 'settings';
 const VECTOR_STORE = 'vectors';
 const EMBEDDING_VERSION = 1;
 const EMBEDDING_DIMENSIONS = 384;
+const CARD_ASSET_VERSION = '20260907-1';
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
@@ -57,7 +58,7 @@ const akaxiImageOrder = [
   ...[64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 77, 76, 75, 74]
 ];
 cards.forEach((card, cardIndex) => {
-  card.image = `assets/akaxi-tarot/${akaxiImageOrder[cardIndex]}.png`;
+  card.image = `assets/akaxi-tarot/${akaxiImageOrder[cardIndex]}.png?v=${CARD_ASSET_VERSION}`;
 });
 
 const spreadLabels = {
@@ -175,28 +176,95 @@ function renderRwsScene(card) {
 
 function renderCardArt(card) {
   return `
-    <div class="card-art-fallback">${renderRwsScene(card)}</div>
-    <img class="card-image" src="${escapeHtml(card.image)}" alt="${escapeHtml(card.name)}牌面" decoding="async" draggable="false">`;
+    <div class="card-art-fallback" aria-hidden="true">
+      ${renderRwsScene(card)}
+      <span class="card-image-status">正在加载牌图…</span>
+    </div>
+    <img class="card-image" src="${escapeHtml(card.image)}" data-original-src="${escapeHtml(card.image)}" alt="${escapeHtml(card.name)}牌面" decoding="async" draggable="false">`;
+}
+
+function bindCardImageLoading() {
+  document.querySelectorAll('.card-image').forEach((image) => {
+    const art = image.closest('.card-art');
+    const status = art.querySelector('.card-image-status');
+
+    const markLoaded = () => {
+      art.classList.remove('image-loading', 'image-retrying', 'image-unavailable');
+      image.style.visibility = 'visible';
+    };
+
+    const markFailed = () => {
+      const retryCount = Number(image.dataset.retryCount || 0);
+      image.style.visibility = 'hidden';
+
+      if (retryCount < 1) {
+        image.dataset.retryCount = String(retryCount + 1);
+        art.classList.add('image-retrying');
+        status.textContent = '牌图加载失败，正在重试…';
+        const separator = image.dataset.originalSrc.includes('?') ? '&' : '?';
+        image.src = `${image.dataset.originalSrc}${separator}retry=${Date.now()}`;
+        return;
+      }
+
+      art.classList.remove('image-retrying');
+      art.classList.add('image-unavailable');
+      status.textContent = '牌图暂时未加载，已显示牌意占位';
+    };
+
+    image.addEventListener('load', markLoaded);
+    image.addEventListener('error', markFailed);
+    if (image.complete) (image.naturalWidth ? markLoaded : markFailed)();
+  });
 }
 
 function renderCards(drawn, spread) {
   $('drawnCards').innerHTML = drawn.map((card, index) => `
     <article class="tarot-card ${isCardReversed(card) ? 'is-reversed' : ''}" style="animation-delay:${index * 140}ms">
       <p class="card-position">${escapeHtml(spreadLabels[spread][index])}</p>
-      <div class="card-art"><div class="card-art-inner">${renderCardArt(card)}</div></div>
+      <div class="card-art image-loading"><div class="card-art-inner">${renderCardArt(card)}</div></div>
       <div class="card-meta">
         <div class="card-name-row"><h3>${escapeHtml(card.name)}</h3><span class="orientation">${isCardReversed(card) ? '逆位' : '正位'}</span></div>
         <p class="keywords">${escapeHtml(isCardReversed(card) ? (typeof card.reversed === 'string' ? card.reversed : card.upright) : card.upright)}</p>
       </div>
     </article>`).join('');
+  bindCardImageLoading();
 }
 
-function topicHint(question) {
+const topicProfiles = {
+  career: {
+    label: '工作与成长',
+    focus: '任务推进、协作边界和资源投入',
+    action: '写下当前最重要的一项交付，再确认一个需要主动沟通的人'
+  },
+  relationship: {
+    label: '关系与感情',
+    focus: '真实需求、沟通方式和双方的选择',
+    action: '先分清一个事实和一个猜测，再用一句不带评判的话表达需求'
+  },
+  finance: {
+    label: '金钱与资源',
+    focus: '现实回报、风险边界和可持续性',
+    action: '把最近的一项收支或投入写成具体数字，设一条不得超过的边界'
+  },
+  wellbeing: {
+    label: '身心状态',
+    focus: '能量恢复、情绪信号和日常节律',
+    action: '先做一件能减少身体负担的小事，并记录完成前后的感受变化'
+  },
+  general: {
+    label: '当下选择',
+    focus: '当下感受、现实限制和下一步行动',
+    action: '把问题缩小成一个今天就能验证的选择，完成后记下真实结果'
+  }
+};
+
+function detectTopic(question) {
   const text = question.toLowerCase();
-  if (/工作|事业|职业|岗位|求职|实习|项目|面试|考试|学业/.test(text)) return '行动、边界与资源分配';
-  if (/感情|关系|恋爱|伴侣|喜欢/.test(text)) return '沟通、需求与相互选择';
-  if (/钱|财|收入|投资|买/.test(text)) return '价值、风险与长期稳定';
-  return '当下感受、选择与下一步行动';
+  if (/工作|事业|职业|岗位|求职|实习|项目|面试|考试|学业/.test(text)) return topicProfiles.career;
+  if (/感情|关系|恋爱|伴侣|喜欢|复合|婚姻/.test(text)) return topicProfiles.relationship;
+  if (/钱|财|收入|投资|消费|购买/.test(text)) return topicProfiles.finance;
+  if (/健康|身体|睡眠|疲惫|焦虑|情绪|压力|恢复/.test(text)) return topicProfiles.wellbeing;
+  return topicProfiles.general;
 }
 
 function reduceNumber(value) {
@@ -364,30 +432,109 @@ async function retrieveSemanticChunks(query, drawn, records, limit = 8) {
   }).filter((chunk) => chunk.score > 0.08).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+function cardKeywords(card) {
+  const meaning = isCardReversed(card) && typeof card.reversed === 'string' ? card.reversed : card.upright;
+  return String(meaning || '').split(' · ').map((word) => word.trim()).filter(Boolean).slice(0, 3);
+}
+
+function naturalJoin(words) {
+  if (words.length < 2) return words[0] || '';
+  return `${words.slice(0, -1).join('、')}和${words[words.length - 1]}`;
+}
+
+function positionReading(card, position, topic) {
+  const keywords = cardKeywords(card);
+  const focus = naturalJoin(keywords);
+  const elementTone = ({
+    '火': '这股能量会通过行动、意志和推进速度表现出来',
+    '水': '它更多流向情绪、关系和内在感受',
+    '风': '它主要体现在想法、判断与沟通方式上',
+    '土': '它最终要回到时间、身体、金钱或可执行的安排上'
+  }[card.element] || '它提醒你把直觉与现实情况放在一起看');
+
+  if (isCardReversed(card)) {
+    return `${position}的${card.name}落在逆位，并不等于「坏结果」，而是说${focus}可能没有顺畅地表达出来：它也许被压住了，也可能用力过度。${elementTone}。放回「${topic.label}」的问题里，先找到哪个环节在消耗你，比立即得出结论更重要。`;
+  }
+
+  return `${position}的${card.name}呈现正位，${focus}是当下可以被你主动调用的力量。${elementTone}。放回「${topic.label}」的问题里，这张牌更像在确认：你已经拥有一部分条件，接下来要看怎样把它用对地方。`;
+}
+
+function bookExcerptForCard(card, bookChunks) {
+  const chunk = bookChunks.find((item) => item.text.includes(card.name));
+  if (!chunk) return '';
+  const clean = chunk.text.replace(/^.*?第 \d+ 段：/, '').replace(/\s+/g, ' ').trim();
+  const at = clean.indexOf(card.name);
+  const start = Math.max(0, at - 28);
+  const excerpt = clean.slice(start, start + 140);
+  return `${start ? '…' : ''}${excerpt}${start + 140 < clean.length ? '…' : ''}`;
+}
+
+function spreadSynthesis(drawn, spread, positions, topic) {
+  const [first, second, third] = drawn;
+  const firstIdea = cardKeywords(first)[0];
+  const secondIdea = cardKeywords(second)[0];
+  const thirdIdea = cardKeywords(third)[0];
+  const closing = isCardReversed(third)
+    ? `但${third.name}逆位说明，这一步不宜靠硬撑；先减少「${thirdIdea}」中的失衡，再决定如何行动。`
+    : `${third.name}正位则给出了出口：把「${thirdIdea}」变成一个实际动作，局面才会真正开始变化。`;
+
+  if (spread === 'timeline') {
+    return `三张牌连起来是一条变化路径：过去的${first.name}留下了「${firstIdea}」这个底色，现在的${second.name}正把问题推向「${secondIdea}」。${closing}`;
+  }
+  if (spread === 'self') {
+    return `这组身·心·灵并不是三个分开的答案：身体层面的${firstIdea}会影响心念中的${secondIdea}，而灵魂位的${third.name}是整合二者的方向。${closing}`;
+  }
+  return `这三张牌说的是同一件事：你眼前最容易感受到的是${first.name}的「${firstIdea}」，但真正让事情卡住的，更可能是${second.name}所指向的「${secondIdea}」。${closing}`;
+}
+
+function personalHistoryInsight(personalChunk, recent, drawn) {
+  if (!personalChunk) return '';
+  const record = recent.find((item) => String(item.id) === String(personalChunk.sourceId));
+  if (!record) return '';
+  const sharedCards = (record.cards || []).filter((oldCard) => drawn.some((card) => card.name === oldCard.name));
+  const date = formatDate(record.dateTime);
+  const feedback = String(record.feedback || '').trim();
+  if (feedback) {
+    const connection = sharedCards.length ? `其中${naturalJoin(sharedCards.map((card) => card.name))}再次出现` : '这次的问题与当时有相似的主题';
+    return `根据你 ${date} 询问「${record.question}」时的记录，你后来反馈「${feedback}」。${connection}，因此这次可以优先观察同一类情况是否重演，而不是直接套用上次的结论。`;
+  }
+  const connection = sharedCards.length ? `这次又出现了${naturalJoin(sharedCards.map((card) => card.name))}` : '它与本次问题在主题上较为接近';
+  return `你在 ${date} 曾经询问「${record.question}」，${connection}。不过那次还没有留下回验，所以它目前只是一条可供对照的线索，还不能当成你的稳定规律。`;
+}
+
 async function buildInterpretation(question, drawn, spread, records) {
   const recent = records.filter((record) => Date.now() - new Date(record.dateTime).getTime() <= THIRTY_DAYS);
   const positions = spreadLabels[spread];
+  const topic = detectTopic(question);
   const numerology = analyzeNumerology(drawn);
   const query = `${question} ${drawn.map((card) => `${card.name} ${isCardReversed(card) ? '逆位' : '正位'} ${card.themes || ''}`).join(' ')} ${numerology.line}`;
   const retrieved = await retrieveSemanticChunks(query, drawn, recent, 8);
   const personal = retrieved.filter((chunk) => chunk.source === 'personal');
-  const lines = [`你问的是「${question}」。这组${spreadNames[spread]}牌面，围绕${topicHint(question)}展开。`, '', `灵数线索：${numerology.line}`, ''];
+  const bookChunks = retrieved.filter((chunk) => chunk.source === 'book');
+  const lines = [
+    `关于「${question}」，这组牌把重点放在${topic.focus}上。它没有给出一个非黑即白的预言，而是在提醒你：当前局面是怎样形成的，以及你可以从哪里开始调整。`,
+    '',
+    '三牌合读',
+    spreadSynthesis(drawn, spread, positions, topic),
+    ''
+  ];
   drawn.forEach((card, index) => {
     const orientation = isCardReversed(card) ? '逆位' : '正位';
-    const meaning = isCardReversed(card) && typeof card.reversed === 'string' ? card.reversed : card.upright;
-    const themes = (card.themes || meaning).split('、').slice(0, 2).join('与');
     lines.push(`${positions[index]} · ${orientation} ${card.name}`);
-    lines.push(`牌号 ${card.number} 的数字把主题拉向「${numerologyMeaning(reduceNumber(card.number))}」；${card.element}元素和${card.astrology || '花色'}让它更具体地表现为${themes}。${isCardReversed(card) ? '逆位不是简单的坏消息，而是提示这股能量可能卡在内在、过量或尚未成熟的状态。' : '正位说明这股能量较容易被你看见并投入现实。'}`);
-    lines.push(`在${positions[index]}位置，它建议你关注：${meaning.split(' · ').slice(0, 3).join('、')}。`);
-    const cardBookChunk = retrieved.find((chunk) => chunk.source === 'book' && (chunk.text.includes(card.name) || (card.themes || '').split('、').some((theme) => theme.length > 1 && chunk.text.includes(theme)))) || retrieved.find((chunk) => chunk.source === 'book');
-    if (cardBookChunk) lines.push(`参考书中的对应提示：${cardBookChunk.text.replace(/^.*?第 \d+ 段：/, '').slice(0, 150)}${cardBookChunk.text.length > 150 ? '……' : ''}`);
+    lines.push(positionReading(card, positions[index], topic));
+    const excerpt = bookExcerptForCard(card, bookChunks);
+    if (excerpt) lines.push(`你上传的参考书中也有一段可作对照：「${excerpt}」这里把它作为补充线索，不替代对当前问题的判断。`);
     lines.push('');
   });
-  lines.push(`牌阵合读：${positions[0]}的${drawn[0].name}先提出${(drawn[0].themes || '').split('、').slice(0, 2).join('与')}，${positions[1]}的${drawn[1].name}显示真正的卡点在${(drawn[1].themes || '').split('、').slice(0, 2).join('与')}，最后由${positions[2]}的${drawn[2].name}把核心灵数 ${numerology.root} 落到${numerologyMeaning(numerology.root)}。因此，比起追问“会不会发生”，更适合先做一个能验证这条路径的小行动。`);
-  if (personal.length) lines.push(`\n个人牌史回声：${personal[0].text.replace('个人历史：', '')}。这条记录被检索出来，是因为它与本次牌名、问题主题或反馈相似。`);
-  else if (recent.length) lines.push('\n个人牌史回声：近 30 天已有记录，但没有找到与本次牌面足够相似的案例。你的下一条反馈会成为新的个人牌意证据。');
-  else lines.push('\n这是你的第一层个人牌意样本。等事情发展后回来写下反馈，未来的解读会逐渐形成属于你的牌意。');
-  lines.push(`\n今日可实践：把${positions[2]}牌的提醒转成一个 15 分钟内能完成的动作；晚上回来记录它是否应验，以及你身体和情绪的真实反应。`);
+  lines.push('灵数辅助线索');
+  lines.push(`三张牌的数字合计为 ${numerology.sum}，核心灵数是 ${numerology.root}，对应「${numerologyMeaning(numerology.root)}」。可以把它看成对上述牌意的一条侧面印证，而不是单独决定结果的数字。${numerology.repeated.length ? `其中数字 ${numerology.repeated.join('、')} 重复，说明这个主题值得特别留意。` : ''}`);
+
+  const historyInsight = personalHistoryInsight(personal[0], recent, drawn);
+  if (historyInsight) lines.push('', '你的牌史对照', historyInsight);
+  else if (recent.length) lines.push('', '你的牌史对照', '近 30 天虽然已经有占卜记录，但暂时没有找到与这次足够相似的牌面或已回验情境。这比勉强类比更可靠；等你补充反馈后，系统才能逐步提炼出属于你的规律。');
+  else lines.push('', '你的牌史对照', '这是你的第一层个人牌意样本。等事情有了进展，请回来写下具体反馈；之后的解读才能从通用牌意慢慢走向你的个人经验。');
+
+  lines.push('', '现在可以做什么', `${topic.action}。做完后，用一句话记录实际发生了什么，并观察${positions[2]}的${drawn[2].name}所提醒的「${cardKeywords(drawn[2])[0]}」是否出现。`);
   return { text: lines.join('\n'), numerology, retrieval: retrieved.map(({ id, source, score, semanticScore }) => ({ id, source, score, semanticScore })) };
 }
 
